@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — RugScan{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-badge">Solana · Random Forest</div>
+  <h1>Dashboard</h1>
+  <p>Sistem Deteksi Potensi Rug Pull Token pada Blockchain Solana menggunakan Metode Random Forest</p>
+</div>
+
+<!-- API Status -->
+<div class="alert alert-info" style="margin-bottom:24px">
+  <span>⚡</span>
+  <div><strong>Siap digunakan!</strong> Sistem menggunakan <strong>DexScreener API</strong> + <strong>Solana RPC</strong> — gratis tanpa API key. Langsung scan token.</div>
+</div>
+
+<!-- STAT CARDS -->
+<div class="stats-grid mb-8">
+  <div class="stat-card">
+    <div class="stat-label">Akurasi Model</div>
+    <div class="stat-value">{{ metrics.accuracy or '--' }}<span class="stat-unit">%</span></div>
+    <div class="stat-sub">Random Forest (Random Forest (200 pohon))</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-label">F1-Score</div>
+    <div class="stat-value">{{ metrics.f1_score or '--' }}<span class="stat-unit">%</span></div>
+    <div class="stat-sub">Balanced Classes</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">AUC-ROC</div>
+    <div class="stat-value">{{ metrics.auc_roc or '--' }}</div>
+    <div class="stat-sub">Area Under Curve</div>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-label">Precision</div>
+    <div class="stat-value">{{ metrics.precision or '--' }}<span class="stat-unit">%</span></div>
+    <div class="stat-sub">Rug Pull Detection</div>
+  </div>
+  <div class="stat-card purple">
+    <div class="stat-label">Recall</div>
+    <div class="stat-value">{{ metrics.recall or '--' }}<span class="stat-unit">%</span></div>
+    <div class="stat-sub">Coverage Rate</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Dataset</div>
+    <div class="stat-value">{{ metrics.total_samples or '--' }}</div>
+    <div class="stat-sub">{{ metrics.train_samples or '--' }} train / {{ metrics.test_samples or '--' }} test</div>
+  </div>
+</div>
+
+<div class="grid-2 mb-6">
+  <!-- Quick Detect -->
+  <div class="card">
+    <div class="card-title">Deteksi Cepat</div>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;line-height:1.6">
+      Masukkan alamat kontrak token Solana untuk menganalisis potensi rug pull secara instan.
+    </p>
+    <form id="quickForm" style="display:flex;gap:10px;">
+      <input type="text" class="form-input" id="quickAddress" placeholder="Token address (e.g. EPjFWdd5...)" style="flex:1">
+      <button type="submit" class="btn btn-primary">Scan</button>
+    </form>
+    <div id="quickResult" style="margin-top:14px;display:none;"></div>
+  </div>
+
+  <!-- How It Works -->
+  <div class="card">
+    <div class="card-title">Cara Kerja Sistem</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      {% for step, text in [
+        ('01', 'Input alamat kontrak token Solana'),
+        ('02', 'Ambil data dari DexScreener → RugCheck.xyz → Solscan → PumpFun (gratis, tanpa key)'),
+        ('03', 'Ekstraksi 12 fitur: konsentrasi holder, mint authority, LP lock, dll'),
+        ('04', 'Klasifikasi dengan Random Forest (Mean Decrease Impurity)'),
+        ('05', 'Tampilkan hasil: label + probabilitas + faktor risiko')
+      ] %}
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <span class="mono text-accent" style="font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px">{{ step }}</span>
+        <span style="color:var(--text-muted);font-size:13px;line-height:1.4">{{ text }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Feature Importance Chart -->
+<div class="card mb-6">
+  <div class="card-title">Fitur On-Chain yang Digunakan Model</div>
+  <div class="charts-2col">
+    <div>
+      <img src="{{ url_for('static', filename='img/feature_importance.png') }}" class="chart-img" alt="Feature Importance" onerror="this.style.display='none'">
+    </div>
+    <div>
+      <p style="color:var(--text-muted);font-size:13px;line-height:1.7;margin-bottom:14px">
+        Model menggunakan <strong style="color:var(--text)">12 fitur on-chain</strong> yang diekstraksi dari blockchain Solana.
+        <strong>Random Forest</strong> menggunakan 200 pohon keputusan — setiap pohon memberikan suara, lalu <em>majority voting</em> menentukan hasil akhir.
+      </p>
+      <table class="feature-table">
+        <thead><tr><th>Fitur</th><th>Keterangan</th></tr></thead>
+        <tbody>
+          <tr><td>top10_holder_pct</td><td style="color:var(--text-muted)">% supply 10 holder terbesar</td></tr>
+          <tr><td>mint_authority</td><td style="color:var(--text-muted)">Dev bisa cetak token baru</td></tr>
+          <tr><td>lp_burned_pct</td><td style="color:var(--text-muted)">% LP token yang dibakar</td></tr>
+          <tr><td>creator_balance</td><td style="color:var(--text-muted)">% supply milik developer</td></tr>
+          <tr><td>liq_to_mc_ratio</td><td style="color:var(--text-muted)">Rasio likuiditas/market cap</td></tr>
+          <tr><td>token_age_days</td><td style="color:var(--text-muted)">Umur token dalam hari</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Nav Cards -->
+<div class="grid-3">
+  <a href="{{ url_for('detect') }}" class="card" style="text-decoration:none;cursor:pointer;">
+    <div style="font-size:28px;margin-bottom:10px">🔍</div>
+    <div style="font-weight:700;color:#fff;margin-bottom:6px">Deteksi Token</div>
+    <div style="color:var(--text-muted);font-size:12px">Analisis token Solana secara real-time menggunakan API on-chain</div>
+  </a>
+  <a href="{{ url_for('model_info') }}" class="card" style="text-decoration:none;cursor:pointer;">
+    <div style="font-size:28px;margin-bottom:10px">📊</div>
+    <div style="font-weight:700;color:#fff;margin-bottom:6px">Model & Evaluasi</div>
+    <div style="color:var(--text-muted);font-size:12px">Lihat confusion matrix, ROC curve, dan aturan keputusan</div>
+  </a>
+  <a href="{{ url_for('dataset_view') }}" class="card" style="text-decoration:none;cursor:pointer;">
+    <div style="font-size:28px;margin-bottom:10px">📁</div>
+    <div style="font-weight:700;color:#fff;margin-bottom:6px">Dataset</div>
+    <div style="color:var(--text-muted);font-size:12px">Lihat data training model dan distribusi kelas</div>
+  </a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('quickForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const addr = document.getElementById('quickAddress').value.trim();
+  const resultEl = document.getElementById('quickResult');
+  if (!addr) return;
+
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<div class="spinner-wrap" style="display:flex;padding:20px 0"><div class="spinner"></div><span style="color:var(--text-muted)">Menganalisis...</span></div>';
+
+  const fd = new FormData();
+  fd.append('address', addr);
+  const res = await fetch('/detect', { method: 'POST', body: fd });
+  const data = await res.json();
+
+  if (data.error) {
+    resultEl.innerHTML = `<div class="alert alert-danger">❌ ${data.error}</div>`;
+    return;
+  }
+  const r = data.result;
+  const col = r.rug_probability >= 60 ? 'var(--red)' : r.rug_probability >= 40 ? 'var(--orange)' : 'var(--green)';
+  resultEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--bg-hover);border-radius:var(--radius);border:1px solid var(--border)">
+      <span style="font-size:24px">${r.risk_icon}</span>
+      <div style="flex:1">
+        <div style="font-weight:700;color:#fff">${r.token_name} (${r.token_symbol})</div>
+        <div style="font-size:12px;color:var(--text-muted)">${r.address.slice(0,20)}...</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:20px;font-weight:800;color:${col};font-family:var(--font-mono)">${r.rug_probability}%</div>
+        <div style="font-size:11px;color:${col}">${r.label}</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;text-align:right">
+      <a href="/detect" style="font-size:12px;color:var(--accent)">Lihat analisis lengkap →</a>
+    </div>`;
+  document.getElementById('quickAddress').value = addr;
+  localStorage.setItem('lastAddress', addr);
+});
+</script>
+{% endblock %}

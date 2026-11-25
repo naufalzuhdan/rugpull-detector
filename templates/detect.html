@@ -1,0 +1,683 @@
+{% extends "base.html" %}
+{% block title %}Deteksi Token — RugScan{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-badge">Real-time Analysis</div>
+  <h1>Deteksi Token</h1>
+  <p>Masukkan alamat kontrak token Solana untuk analisis potensi rug pull secara mendalam.</p>
+</div>
+
+<!-- Input Form -->
+<div class="card mb-6" style="max-width:700px">
+  <div class="card-title">Input Token Address</div>
+  <form id="detectForm">
+    <div class="form-group">
+      <label class="form-label">Alamat Kontrak Token Solana (SPL Token Address)</label>
+      <input type="text" class="form-input" id="tokenAddress" name="address"
+             placeholder="Contoh: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+             style="font-size:12px" required>
+      <div class="form-hint">Base58 encoded · 32–44 karakter · Contoh: USDC = EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v</div>
+    </div>
+    <button type="submit" class="btn btn-primary" id="scanBtn">
+      <span>🔍</span> Scan Token
+    </button>
+    <button type="button" class="btn btn-secondary" id="demoBtn" style="margin-left:8px">
+      Demo (Sample Data)
+    </button>
+  </form>
+</div>
+
+<!-- Loading -->
+<div class="spinner-wrap" id="loadingWrap">
+  <div class="spinner"></div>
+  <div>
+    <div style="color:var(--text);font-weight:600">Mengambil data on-chain...</div>
+    <div class="mono text-dim" style="font-size:11px;margin-top:4px" id="loadingStep">Menghubungkan ke DexScreener API...</div>
+  </div>
+</div>
+
+<!-- Error -->
+<div class="error-panel" id="errorPanel">
+  <strong>❌ Error:</strong> <span id="errorMsg"></span>
+</div>
+
+<!-- RESULT PANEL -->
+<div class="result-panel" id="resultPanel">
+
+  <!-- Header -->
+  <div class="result-header" id="resultHeader">
+    <span class="result-icon" id="resultIcon">🔍</span>
+    <div style="flex:1">
+      <div class="result-label" id="resultLabel">—</div>
+      <div class="result-sublabel" id="resultSub">—</div>
+    </div>
+    <div style="text-align:right">
+      <div class="mono" style="font-size:28px;font-weight:800" id="resultPct">0%</div>
+      <div style="font-size:12px;color:var(--text-muted)">Probabilitas Rug Pull</div>
+    </div>
+  </div>
+
+  <!-- Probability Bar -->
+  <div class="probability-bar-wrap">
+    <div class="prob-labels">
+      <span>Legitimate <span id="legitPct">(0%)</span></span>
+      <span>Rug Pull <span id="rugPct">(0%)</span></span>
+    </div>
+    <div class="prob-bar-bg">
+      <div class="prob-bar-fill" id="probBar" style="width:0%"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text-dim)">
+      <span>AMAN ✅</span>
+      <span>SEDANG ⚡</span>
+      <span>BERBAHAYA 🚨</span>
+    </div>
+  </div>
+
+  <!-- Risk Analysis -->
+  <div class="risk-grid" id="riskGrid"></div>
+
+  <!-- Divider -->
+  <hr class="divider" style="margin:0">
+
+  <!-- Feature Details Table + Chart -->
+  <div class="grid-2 mt-6 mb-6">
+    <div class="card">
+      <div class="card-title">Detail Fitur On-Chain</div>
+      <div class="table-wrap">
+        <table class="feature-table" id="featureTable">
+          <thead><tr><th>Fitur</th><th>Nilai</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Informasi Token</div>
+      <table class="feature-table" id="tokenInfoTable">
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div style="display:flex;gap:10px;margin-top:8px">
+    <button class="btn btn-secondary" onclick="resetForm()">🔄 Scan Token Lain</button>
+    <button class="btn btn-secondary" onclick="copyReport()">📋 Salin Laporan</button>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const FEATURE_LABELS = {
+  top10_holder_pct:         "Top 10 Holder (%)",
+  top1_holder_pct:          "Top 1 Holder (%)",
+  creator_balance_pct:      "Creator Balance (%)",
+  mint_authority_enabled:   "Mint Authority",
+  freeze_authority_enabled: "Freeze Authority",
+  lp_burned_pct:            "LP Burned (%)",
+  liq_to_mc_ratio:          "Likuiditas/Market Cap",
+  vol_to_liq_ratio:         "Volume/Likuiditas",
+  token_age_days:           "Umur Token (hari)",
+  liquidity:                "Likuiditas (USD)",
+  unique_holders:           "Jumlah Holder",
+  price_change_24h:         "Perubahan Harga 24h (%)"
+};
+
+const DEMO_DATA = {
+  success: true,
+  result: {
+    prediction: 1, label: "Rug Pull",
+    rug_probability: 87.3, legit_probability: 12.7,
+    risk_level: "SANGAT TINGGI", risk_color: "#e74c3c", risk_icon: "🚨",
+    token_name: "DEMO TOKEN", token_symbol: "DEMO",
+    address: "DEMO1234567890ABCDEFGHIJKLMNOP",
+    risk_factors: [
+      {feature:"Mint Authority Aktif", detail:"Developer masih bisa mencetak token baru tanpa batas", severity:"critical"},
+      {feature:"Konsentrasi Holder", detail:"Top 10 holder memiliki 91.2% supply — sangat terkonsentrasi", severity:"high"},
+      {feature:"Likuiditas Tidak Terkunci", detail:"Hanya 3.1% LP token yang dibakar — dev bisa tarik likuiditas", severity:"critical"},
+      {feature:"Token Sangat Baru", detail:"Token berumur 2.4 hari — belum terbukti aman", severity:"medium"}
+    ],
+    positive_factors: [],
+    feature_values: {
+      top10_holder_pct:91.2, top1_holder_pct:62.1, creator_balance_pct:45.8,
+      mint_authority_enabled:1, freeze_authority_enabled:1, lp_burned_pct:3.1,
+      liq_to_mc_ratio:0.008, vol_to_liq_ratio:12.4, token_age_days:2.4,
+      liquidity:4200, unique_holders:48, price_change_24h:320
+    },
+    raw_features: {
+      price_usd:0.0000012, market_cap:12000, volume_24h:51400,
+      total_supply:1000000000000, decimals:9
+    }
+  }
+};
+
+let lastResult = null;
+
+function showLoading(show) {
+  document.getElementById('loadingWrap').style.display = show ? 'flex' : 'none';
+}
+function showError(msg) {
+  const p = document.getElementById('errorPanel');
+  p.style.display = 'block';
+  document.getElementById('errorMsg').textContent = msg;
+}
+function hideAll() {
+  document.getElementById('loadingWrap').style.display = 'none';
+  document.getElementById('errorPanel').style.display = 'none';
+  document.getElementById('resultPanel').style.display = 'none';
+}
+
+const loadingSteps = [
+  "Menghubungkan ke DexScreener API...",
+  "Mengambil data token overview...",
+  "Memeriksa security & holder data...",
+  "Mengekstraksi fitur on-chain...",
+  "Menjalankan model Random Forest...",
+  "Menyusun laporan hasil...",
+];
+let stepIdx = 0, stepInterval;
+
+function startLoadingSteps() {
+  stepIdx = 0;
+  document.getElementById('loadingStep').textContent = loadingSteps[0];
+  stepInterval = setInterval(() => {
+    stepIdx = Math.min(stepIdx + 1, loadingSteps.length - 1);
+    document.getElementById('loadingStep').textContent = loadingSteps[stepIdx];
+  }, 1800);
+}
+function stopLoadingSteps() { clearInterval(stepInterval); }
+
+document.getElementById('detectForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const address = document.getElementById('tokenAddress').value.trim();
+  if (!address) return;
+  await runScan(address, false);
+});
+
+document.getElementById('demoBtn').addEventListener('click', () => {
+  document.getElementById('tokenAddress').value = '';
+  renderResult(DEMO_DATA);
+});
+
+async function runScan(address, isDemo) {
+  hideAll();
+  showLoading(true);
+  startLoadingSteps();
+  document.getElementById('scanBtn').disabled = true;
+
+  try {
+    const fd = new FormData();
+    fd.append('address', address);
+    const res = await fetch('/detect', { method: 'POST', body: fd });
+    const data = await res.json();
+    stopLoadingSteps();
+    showLoading(false);
+    document.getElementById('scanBtn').disabled = false;
+
+    if (data.error) { showError(data.error); return; }
+    renderResult(data);
+  } catch (err) {
+    stopLoadingSteps();
+    showLoading(false);
+    document.getElementById('scanBtn').disabled = false;
+    showError('Gagal terhubung ke server. Periksa koneksi internet Anda.');
+  }
+}
+
+function renderResult(data) {
+  const r = data.result;
+  lastResult = r;
+
+  // Simpan ke history & localStorage
+  if (r.address && r.address.length > 10 && !r.address.startsWith('DEMO')) {
+    localStorage.setItem('lastAddress', r.address);
+    saveToHistory(r);
+  }
+
+  // ── RugCheck confirmed badge ──────────────────────────
+  if (r.rugcheck_confirmed) {
+    const existingBadge = document.getElementById('rugcheckedBadge');
+    if (!existingBadge) {
+      const badge = document.createElement('div');
+      badge.id = 'rugcheckedBadge';
+      badge.style.cssText = 'background:rgba(231,76,60,0.12);color:#e74c3c;border:1px solid #e74c3c;border-radius:6px;padding:6px 12px;font-size:12px;margin-bottom:10px;font-weight:600;';
+      badge.textContent = '🚨 DIKONFIRMASI RUG PULL oleh RugCheck.xyz';
+      const panel = document.getElementById('resultPanel');
+      if (panel) panel.insertBefore(badge, panel.firstChild);
+    }
+  } else {
+    const b = document.getElementById('rugcheckedBadge');
+    if (b) b.remove();
+  }
+
+  // Header
+  const panel = document.getElementById('resultPanel');
+  panel.style.display = 'block';
+  document.getElementById('resultIcon').textContent = r.risk_icon;
+  document.getElementById('resultLabel').textContent = r.label;
+  document.getElementById('resultLabel').style.color = r.risk_color;
+  document.getElementById('resultSub').textContent =
+    `${r.token_name} (${r.token_symbol}) · ${r.algorithm || "Random Forest"} · Risiko: ${r.risk_level}`;
+  document.getElementById('resultPct').textContent = r.rug_probability + '%';
+  document.getElementById('resultPct').style.color = r.risk_color;
+
+  // Probability bar
+  setTimeout(() => {
+    document.getElementById('probBar').style.width = r.rug_probability + '%';
+  }, 100);
+  document.getElementById('rugPct').textContent = `(${r.rug_probability}%)`;
+  document.getElementById('legitPct').textContent = `(${r.legit_probability}%)`;
+
+  // Risk factors grid
+  const rg = document.getElementById('riskGrid');
+  let html = '';
+  for (const rf of r.risk_factors) {
+    html += `<div class="risk-item ${rf.severity}">
+      <div class="risk-dot ${rf.severity}"></div>
+      <div><div class="risk-feature">${rf.feature}</div>
+      <div class="risk-detail">${rf.detail}</div></div></div>`;
+  }
+  for (const pf of r.positive_factors) {
+    html += `<div class="risk-item positive">
+      <div class="risk-dot positive"></div>
+      <div><div class="risk-feature">✅ Faktor Positif</div>
+      <div class="risk-detail">${pf}</div></div></div>`;
+  }
+  if (!html) html = '<div style="grid-column:1/-1;color:var(--text-muted);padding:12px;font-size:13px">Tidak ada faktor risiko signifikan yang terdeteksi.</div>';
+  rg.innerHTML = html;
+
+  // Feature table
+  const fv = r.feature_values;
+  const ft = document.querySelector('#featureTable tbody');
+  ft.innerHTML = '';
+  for (const [key, label] of Object.entries(FEATURE_LABELS)) {
+    const val = fv[key];
+    let status = '—', cls = '';
+    if (key === 'mint_authority_enabled' || key === 'freeze_authority_enabled') {
+      status = val === 1 ? '<span class="text-red">AKTIF ⚠</span>' : '<span class="text-green">NONAKTIF ✓</span>';
+    } else if (key === 'top10_holder_pct') {
+      status = val > 70 ? '<span class="text-red">Tinggi ⚠</span>' : '<span class="text-green">Normal ✓</span>';
+    } else if (key === 'lp_burned_pct') {
+      status = val < 20 ? '<span class="text-red">Rendah ⚠</span>' : '<span class="text-green">Aman ✓</span>';
+    } else if (key === 'token_age_days') {
+      status = val < 7 ? '<span class="text-orange">Baru ⚡</span>' : '<span class="text-green">Normal ✓</span>';
+    }
+
+    let displayVal = typeof val === 'number'
+      ? (key === 'liquidity' ? '$' + val.toLocaleString() : val.toFixed(key.includes('ratio') ? 4 : 1))
+      : val;
+
+    ft.innerHTML += `<tr><td style="color:var(--text-muted)">${label}</td>
+      <td class="mono">${displayVal}</td><td>${status}</td></tr>`;
+  }
+
+  // Token info
+  const raw = r.raw_features || {};
+  const ti = document.querySelector('#tokenInfoTable tbody');
+  ti.innerHTML = `
+    <tr><td style="color:var(--text-muted)">Nama Token</td><td class="mono text-accent">${r.token_name}</td></tr>
+    <tr><td style="color:var(--text-muted)">Symbol</td><td class="mono">${r.token_symbol}</td></tr>
+    <tr><td style="color:var(--text-muted)">Alamat</td><td class="mono" style="font-size:10px">${r.address.slice(0,24)}...</td></tr>
+    <tr><td style="color:var(--text-muted)">Harga (USD)</td><td class="mono">$${(raw.price_usd||0).toFixed(8)}</td></tr>
+    <tr><td style="color:var(--text-muted)">Market Cap</td><td class="mono">$${Number(raw.market_cap||0).toLocaleString()}</td></tr>
+    <tr><td style="color:var(--text-muted)">Volume 24h</td><td class="mono">$${Number(raw.volume_24h||0).toLocaleString()}</td></tr>
+    <tr><td style="color:var(--text-muted)">Total Supply</td><td class="mono">${Number(raw.total_supply||0).toLocaleString()}</td></tr>
+  `;
+
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // ── Browser-side enrichment ──────────────────────────────────
+  // Pakai variabel r dan fv yang sudah ada di scope renderResult(data)
+  const tokenAddr = r.address;
+  const needsEnrich = (
+    (fv.top10_holder_pct || 0) === 0 &&
+    (fv.top1_holder_pct  || 0) === 0 &&
+    (fv.unique_holders   || 0) === 0 &&
+    tokenAddr && tokenAddr.length >= 32
+  );
+  if (needsEnrich) {
+    setTimeout(() => enrichHolderData(tokenAddr), 300);
+  }
+}
+
+// ── Browser-side Solana RPC + RugCheck caller ────────────────────
+const RPC_NODES = [
+  'https://api.mainnet-beta.solana.com',
+  'https://solana.publicnode.com',
+  'https://rpc.ankr.com/solana',
+  'https://endpoints.omniatech.io/v1/sol/mainnet/public',
+];
+
+async function rpcPost(node, method, params) {
+  const r = await fetch(node, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    signal: AbortSignal.timeout(12000)
+  });
+  if (!r.ok) return null;
+  const d = await r.json();
+  return d.error ? null : (d.result ?? null);
+}
+
+async function rpcParallel(method, params) {
+  // Coba semua node bersamaan — gunakan yang pertama berhasil
+  return new Promise(resolve => {
+    let done = false;
+    let pending = RPC_NODES.length;
+    RPC_NODES.forEach(node => {
+      rpcPost(node, method, params)
+        .then(res => {
+          if (!done && res !== null) {
+            done = true;
+            resolve(res);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          pending--;
+          if (!done && pending === 0) resolve(null);
+        });
+    });
+  });
+}
+
+// Update satu baris di tabel fitur + recalculate row yang bergantung
+function patchFeatureRow(key, rawVal) {
+  const LABELS = {
+    top10_holder_pct:       'Top 10 Holder (%)',
+    top1_holder_pct:        'Top 1 Holder (%)',
+    creator_balance_pct:    'Creator Balance (%)',
+    lp_burned_pct:          'LP Burned (%)',
+    unique_holders:         'Jumlah Holder',
+    mint_authority_enabled: 'Mint Authority',
+    freeze_authority_enabled:'Freeze Authority',
+  };
+  const tb = document.querySelector('#featureTable tbody');
+  if (!tb) return;
+  for (const row of tb.rows) {
+    if (row.cells[0] && row.cells[0].textContent.trim() === LABELS[key]) {
+      const val = parseFloat(rawVal) || 0;
+
+      // Nilai tampilan
+      row.cells[1].textContent = key === 'unique_holders'
+        ? Math.round(val).toLocaleString()
+        : val.toFixed(key.includes('ratio') ? 4 : 1);
+
+      // Status
+      let status = '—';
+      if (key === 'top10_holder_pct')
+        status = val > 70
+          ? '<span class="text-red">Tinggi ⚠</span>'
+          : '<span class="text-green">Normal ✓</span>';
+      else if (key === 'lp_burned_pct')
+        status = val < 20
+          ? '<span class="text-red">Rendah ⚠</span>'
+          : '<span class="text-green">Aman ✓</span>';
+      row.cells[2].innerHTML = status;
+
+      // Flash animasi agar terlihat berubah
+      row.style.transition = 'background 0.4s';
+      row.style.background = 'rgba(29,158,117,0.18)';
+      setTimeout(() => row.style.background = '', 1200);
+      break;
+    }
+  }
+}
+
+function showHolderBanner(msg, color) {
+  let banner = document.getElementById('holderBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'holderBanner';
+    banner.style.cssText =
+      'padding:6px 14px;border-radius:6px;font-size:12px;margin-bottom:10px;' +
+      'transition:opacity 1s;';
+    const ft = document.getElementById('featureTable');
+    if (ft) ft.parentNode.insertBefore(banner, ft);
+  }
+  banner.style.background = color === 'ok'
+    ? 'rgba(29,158,117,0.15)' : 'rgba(231,76,60,0.12)';
+  banner.style.color = color === 'ok' ? '#1d9e75' : '#e74c3c';
+  banner.textContent = msg;
+  banner.style.opacity = '1';
+  if (color === 'ok')
+    setTimeout(() => { banner.style.opacity = '0'; }, 5000);
+}
+
+async function enrichHolderData(address) {
+  showHolderBanner('⏳ Mengambil data holder langsung dari Solana blockchain...', 'ok');
+
+  let enriched = false;
+
+  // ── 1. Solana RPC: supply + largest accounts ─────────────
+  const [supplyResult, largestResult] = await Promise.all([
+    rpcParallel('getTokenSupply',         [address]),
+    rpcParallel('getTokenLargestAccounts',[address]),
+  ]);
+
+  // uiAmount bisa NULL untuk token supply sangat besar → pakai uiAmountString
+  const supplyVal = supplyResult?.value;
+  const supplyUiStr = supplyVal?.uiAmountString || String(supplyVal?.uiAmount ?? '0');
+  let supplyUi = parseFloat(supplyUiStr) || 0;
+  // Fallback: raw amount / 10^decimals
+  if (!supplyUi && supplyVal?.amount && supplyVal?.decimals != null) {
+    supplyUi = parseInt(supplyVal.amount) / Math.pow(10, supplyVal.decimals);
+  }
+
+  const accounts  = largestResult?.value || [];
+  const decimals  = supplyVal?.decimals ?? 9;
+
+  if (accounts.length > 0 && supplyUi > 0) {
+    let top10 = 0, top1 = 0;
+    accounts.slice(0, 10).forEach((h, i) => {
+      // uiAmountString selalu ada, uiAmount bisa null
+      const uiStr = h.uiAmountString || String(h.uiAmount ?? '0');
+      let ui = parseFloat(uiStr) || 0;
+      if (!ui && h.amount) ui = parseInt(h.amount) / Math.pow(10, decimals);
+      const pct = (ui / supplyUi) * 100;
+      top10 += pct;
+      if (i === 0) top1 = pct;
+    });
+    patchFeatureRow('top10_holder_pct', Math.min(top10, 100).toFixed(2));
+    patchFeatureRow('top1_holder_pct',  Math.min(top1,  100).toFixed(2));
+    enriched = true;
+  }
+
+  // ── 2. Solana RPC: mint info ─────────────────────────────
+  const mintResult = await rpcParallel('getAccountInfo',
+    [address, { encoding: 'jsonParsed' }]);
+  const mintInfo = mintResult?.value?.data?.parsed?.info;
+  if (mintInfo) {
+    // Hanya update jika memang 0 (server mungkin sudah benar)
+    patchFeatureRow('mint_authority_enabled',    mintInfo.mintAuthority   ? 1 : 0);
+    patchFeatureRow('freeze_authority_enabled',  mintInfo.freezeAuthority ? 1 : 0);
+    enriched = true;
+  }
+
+  // ── 3. RugCheck: totalHolders + lpLockedPct ──────────────
+  try {
+    const rc = await fetch(
+      `https://api.rugcheck.xyz/v1/tokens/${address}/report/summary`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (rc.ok) {
+      const rcd = await rc.json();
+      if (rcd.totalHolders > 0) {
+        patchFeatureRow('unique_holders', rcd.totalHolders);
+        enriched = true;
+      }
+      if (rcd.lpLockedPct > 0) {
+        patchFeatureRow('lp_burned_pct', rcd.lpLockedPct.toFixed(2));
+        enriched = true;
+      }
+      if (rcd.creatorPercentage > 0) {
+        const pct = rcd.creatorPercentage > 1
+          ? rcd.creatorPercentage
+          : rcd.creatorPercentage * 100;
+        patchFeatureRow('creator_balance_pct', pct.toFixed(2));
+        enriched = true;
+      }
+      // Fallback topHolders jika RPC gagal
+      if (!enriched && rcd.topHolders && rcd.topHolders.length > 0) {
+        let t10 = 0, t1 = 0;
+        rcd.topHolders.slice(0, 10).forEach((h, i) => {
+          const p = parseFloat(h.pct || h.percentage || h.ownerPercentage || 0);
+          const pct = p > 1 ? p : p * 100;
+          t10 += pct;
+          if (i === 0) t1 = pct;
+        });
+        if (t10 > 0) {
+          patchFeatureRow('top10_holder_pct', Math.min(t10, 100).toFixed(2));
+          patchFeatureRow('top1_holder_pct',  t1.toFixed(2));
+          enriched = true;
+        }
+      }
+    }
+  } catch (e) {}
+
+  if (enriched) {
+    showHolderBanner('✅ Data holder berhasil diambil langsung dari blockchain', 'ok');
+    // Tampilkan tombol re-scan agar probabilitas dihitung ulang dengan data terkini
+    let btn = document.getElementById('rescanBtn');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'rescanBtn';
+      btn.className = 'btn btn-secondary';
+      btn.style.cssText = 'margin-top:10px;font-size:12px;display:block;';
+      btn.innerHTML = '↻ Scan Ulang dengan Data Terkini (probabilitas akan diperbarui)';
+      btn.onclick = () => {
+        btn.remove();
+        runScan(address, false);
+      };
+      const ft = document.getElementById('featureTable');
+      if (ft && ft.parentNode) ft.parentNode.insertBefore(btn, ft);
+    }
+  } else {
+    showHolderBanner(
+      '⚠ Data holder tidak tersedia dari public RPC. ' +
+      'getTokenLargestAccounts diblokir di endpoint publik. ' +
+      'Solusi: daftar API key GRATIS di dev.helius.xyz → isi HELIUS_API_KEY di file .env → restart app.',
+      'warn'
+    );
+  }
+}
+
+function resetForm() {
+  hideAll();
+  document.getElementById('tokenAddress').value = '';
+  document.getElementById('tokenAddress').focus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function copyReport() {
+  if (!lastResult) return;
+  const r = lastResult;
+  const lines = [
+    `=== LAPORAN DETEKSI RUG PULL ===`,
+    `Token  : ${r.token_name} (${r.token_symbol})`,
+    `Alamat : ${r.address}`,
+    `Hasil  : ${r.label}`,
+    `Risiko : ${r.risk_level} (${r.rug_probability}%)`,
+    ``,
+    `--- Faktor Risiko ---`,
+    ...r.risk_factors.map(f => `[${f.severity.toUpperCase()}] ${f.feature}: ${f.detail}`),
+    ``,
+    `--- Fitur On-Chain ---`,
+    ...Object.entries(r.feature_values).map(([k,v]) => `${k}: ${v}`)
+  ];
+  navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    alert('Laporan berhasil disalin ke clipboard!');
+  });
+}
+
+// ── Scan History (localStorage) ──────────────────────────────────────
+const HISTORY_KEY = 'rugScanHistory';
+const MAX_HISTORY = 10;
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+  catch(e) { return []; }
+}
+
+function saveToHistory(result) {
+  const history = loadHistory();
+  const entry = {
+    address:         result.address,
+    token_name:      result.token_name,
+    token_symbol:    result.token_symbol,
+    label:           result.label,
+    rug_probability: result.rug_probability,
+    risk_level:      result.risk_level,
+    scanned_at:      new Date().toLocaleString('id-ID'),
+  };
+  // Hapus duplikat address yang sama
+  const filtered = history.filter(h => h.address !== entry.address);
+  filtered.unshift(entry);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered.slice(0, MAX_HISTORY)));
+  renderHistory();
+}
+
+function renderHistory() {
+  const history = loadHistory();
+  const wrap = document.getElementById('historyWrap');
+  const list = document.getElementById('historyList');
+  if (!wrap || !list) return;
+  if (history.length === 0) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  list.innerHTML = history.map(h => {
+    const isRug = h.label === 'Rug Pull';
+    const pctColor = h.rug_probability >= 60 ? '#e74c3c' : h.rug_probability >= 30 ? '#e67e22' : '#2ecc71';
+    return `
+      <div class="history-item" onclick="document.getElementById('tokenAddress').value='${h.address}'; runScan('${h.address}', false);"
+           style="cursor:pointer;padding:6px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;transition:background 0.2s;"
+           onmouseover="this.style.background='var(--surface-1)'" onmouseout="this.style.background=''">
+        <span style="font-size:16px">${isRug ? '🚨' : '✅'}</span>
+        <div style="flex:1;min-width:0;">
+          <div class="mono" style="font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            ${h.token_name} <span style="opacity:0.6">(${h.token_symbol})</span>
+          </div>
+          <div class="mono text-dim" style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            ${h.address}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-weight:700;font-size:13px;color:${pctColor}">${h.rug_probability}%</div>
+          <div style="font-size:10px;color:var(--text-muted)">${h.scanned_at}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function clearHistory() {
+  localStorage.removeItem(HISTORY_KEY);
+  renderHistory();
+}
+
+// Restore last address & render history saat halaman load
+const last = localStorage.getItem('lastAddress');
+if (last) document.getElementById('tokenAddress').value = last;
+renderHistory();
+</script>
+
+{# ── History Panel (di atas form) — di-inject via JS setelah form #}
+<script>
+(function() {
+  const histHtml = `
+    <div id="historyWrap" style="display:none;max-width:700px;margin-bottom:16px;">
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);">
+          <span style="font-size:12px;font-weight:600;color:var(--text-muted);">📋 RIWAYAT SCAN (klik untuk scan ulang)</span>
+          <button onclick="clearHistory()" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--text-muted);padding:2px 6px;border-radius:4px;border:1px solid var(--border);">Hapus semua</button>
+        </div>
+        <div id="historyList"></div>
+      </div>
+    </div>`;
+  const form = document.querySelector('.card.mb-6');
+  if (form) form.insertAdjacentHTML('beforebegin', histHtml);
+  renderHistory();
+})();
+</script>
+{% endblock %}

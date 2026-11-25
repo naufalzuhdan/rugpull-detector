@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Model & Evaluasi — RugScan{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-badge">Machine Learning</div>
+  <h1>Model & Evaluasi</h1>
+  <p>Performa model Random Forest untuk deteksi rug pull token Solana.</p>
+</div>
+
+<!-- Metrics -->
+<div class="metrics-grid mb-6">
+  {% for label, key, unit in [
+    ('Accuracy','accuracy','%'), ('Precision','precision','%'),
+    ('Recall','recall','%'), ('F1-Score','f1_score','%'),
+    ('AUC-ROC','auc_roc',''), ('OOB Score','oob_score',''),
+    ('CV F1 Mean','cv_f1_mean','%'), ('CV F1 Std','cv_f1_std','%')
+  ] %}
+  <div class="metric-pill">
+    <div class="value">{{ metrics.get(key, '--') }}{{ unit }}</div>
+    <div class="label">{{ label }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Charts Row 1 -->
+<div class="charts-2col mb-6">
+  <div class="card">
+    <div class="card-title">Confusion Matrix</div>
+    <img src="{{ url_for('static', filename='img/confusion_matrix.png') }}" class="chart-img" alt="Confusion Matrix" onerror="this.outerHTML='<div class=\'alert alert-warn\'>Chart belum tersedia. Train model dulu.</div>'">
+    <p style="color:var(--text-muted);font-size:12px;margin-top:10px;line-height:1.5">
+      Diagonal utama menunjukkan prediksi yang benar. TN = token legitimate diprediksi benar, TP = rug pull terdeteksi benar.
+    </p>
+  </div>
+  <div class="card">
+    <div class="card-title">ROC Curve</div>
+    <img src="{{ url_for('static', filename='img/roc_curve.png') }}" class="chart-img" alt="ROC Curve" onerror="this.outerHTML='<div class=\'alert alert-warn\'>Chart belum tersedia.</div>'">
+    <p style="color:var(--text-muted);font-size:12px;margin-top:10px;line-height:1.5">
+      Area Under Curve (AUC) = <strong style="color:var(--accent)">{{ metrics.auc_roc or '--' }}</strong>. Semakin mendekati 1.0, semakin baik kemampuan diskriminasi model.
+    </p>
+  </div>
+</div>
+
+<!-- Feature Importance -->
+<div class="card mb-6">
+  <div class="card-title">Feature Importance</div>
+  <img src="{{ url_for('static', filename='img/feature_importance.png') }}" class="chart-img" alt="Feature Importance" onerror="this.outerHTML='<div class=\'alert alert-warn\'>Chart belum tersedia.</div>'">
+  {% if metrics.feature_importance %}
+  <div class="table-wrap mt-4">
+    <table class="data-table">
+      <thead>
+        <tr><th>#</th><th>Fitur</th><th>Mean Decrease Impurity</th><th>Visualisasi</th></tr>
+      </thead>
+      <tbody>
+      {% for feat, imp in metrics.feature_importance.items() %}
+        <tr>
+          <td class="text-dim">{{ loop.index }}</td>
+          <td class="mono">{{ feat }}</td>
+          <td class="mono text-accent">{{ "%.4f"|format(imp) }}</td>
+          <td>
+            <div style="background:var(--bg-hover);border-radius:3px;height:8px;width:100%;max-width:200px">
+              <div style="background:var(--accent);height:100%;border-radius:3px;width:{{ (imp * 800)|round }}px;max-width:200px;opacity:0.85"></div>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Random Forest Visualization -->
+<div class="card mb-6">
+  <div class="card-title">Visualisasi Random Forest</div>
+  <img src="{{ url_for('static', filename='img/random_forest.png') }}" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)" alt="Random Forest" onerror="this.outerHTML='<div class=\'alert alert-warn\'>Chart belum tersedia.</div>'">
+  <p style="color:var(--text-muted);font-size:12px;margin-top:10px">Random Forest menggunakan 200 pohon keputusan. Gambar di atas menampilkan SATU contoh pohon (tree ke-0, max_depth=4) sebagai representasi visual cara kerja model.</p>
+</div>
+
+<!-- Decision Rules Text -->
+{% if metrics.decision_rules %}
+<div class="card mb-6">
+  <div class="card-title">Cara Kerja Random Forest</div>
+  <pre class="rules-pre">{{ metrics.decision_rules }}</pre>
+</div>
+{% endif %}
+
+<!-- Cross Validation -->
+<div class="card mb-6">
+  <div class="card-title">Konfigurasi Model</div>
+  <div class="grid-2">
+    <table class="feature-table">
+      <thead><tr><th>Parameter</th><th>Nilai</th></tr></thead>
+      <tbody>
+        <tr><td>Algoritma</td><td class="mono text-accent">Random Forest</td></tr>
+        <tr><td>Criterion</td><td class="mono">entropy (Random Forest (200 pohon))</td></tr>
+        <tr><td>Max Depth</td><td class="mono">8</td></tr>
+        <tr><td>Min Samples Split</td><td class="mono">20</td></tr>
+        <tr><td>Min Samples Leaf</td><td class="mono">10</td></tr>
+        <tr><td>Class Weight</td><td class="mono">balanced</td></tr>
+        <tr><td>Cross Validation</td><td class="mono">10-Fold Stratified</td></tr>
+      </tbody>
+    </table>
+    <table class="feature-table">
+      <thead><tr><th>Metrik</th><th>Nilai</th></tr></thead>
+      <tbody>
+        <tr><td>Training Samples</td><td class="mono">{{ metrics.train_samples or '--' }}</td></tr>
+        <tr><td>Test Samples</td><td class="mono">{{ metrics.test_samples or '--' }}</td></tr>
+        <tr><td>Total Dataset</td><td class="mono">{{ metrics.total_samples or '--' }}</td></tr>
+        <tr><td>CV F1 Mean</td><td class="mono text-green">{{ metrics.cv_f1_mean or '--' }}%</td></tr>
+        <tr><td>CV F1 Std</td><td class="mono">±{{ metrics.cv_f1_std or '--' }}%</td></tr>
+        <tr><td>Jumlah Fitur</td><td class="mono">12</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Retrain -->
+<div class="card">
+  <div class="card-title">Re-Training Model</div>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">
+    Latih ulang model dengan dataset terbaru. Proses ini akan memperbarui semua chart dan metrik evaluasi.
+  </p>
+  <button class="btn btn-secondary" id="retrainBtn" onclick="retrainModel()">
+    🔄 Re-Train Model
+  </button>
+  <div id="retrainStatus" style="display:none;margin-top:12px"></div>
+</div>
+
+<script>
+async function retrainModel() {
+  const btn = document.getElementById('retrainBtn');
+  const status = document.getElementById('retrainStatus');
+  btn.disabled = true;
+  btn.textContent = '⏳ Training...';
+  status.style.display = 'block';
+  status.innerHTML = '<div class="alert alert-info">Model sedang dilatih ulang, harap tunggu...</div>';
+
+  try {
+    const res = await fetch('/api/retrain', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      status.innerHTML = `<div class="alert alert-success">✅ Training berhasil! Accuracy: ${data.metrics.accuracy}% | F1: ${data.metrics.f1_score}%<br><button onclick="location.reload()" class="btn btn-primary" style="margin-top:8px">Refresh Halaman</button></div>`;
+    } else {
+      status.innerHTML = `<div class="alert alert-danger">❌ Error: ${data.error}</div>`;
+    }
+  } catch(e) {
+    status.innerHTML = '<div class="alert alert-danger">❌ Gagal terhubung ke server.</div>';
+  }
+  btn.disabled = false;
+  btn.textContent = '🔄 Re-Train Model';
+}
+</script>
+{% endblock %}

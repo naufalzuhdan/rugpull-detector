@@ -1,0 +1,31 @@
+{
+  "algorithm": "Random Forest",
+  "n_estimators": 200,
+  "max_depth": 15,
+  "oob_score": 0.8575,
+  "accuracy": 86.0,
+  "precision": 92.41,
+  "recall": 82.95,
+  "f1_score": 87.43,
+  "auc_roc": 0.929,
+  "cv_f1_mean": 88.29,
+  "cv_f1_std": 2.07,
+  "train_samples": 1200,
+  "test_samples": 300,
+  "total_samples": 1500,
+  "feature_importance": {
+    "top10_holder_pct": 0.2341316357895166,
+    "liquidity": 0.1848707179314,
+    "liq_to_mc_ratio": 0.13189736687450607,
+    "top1_holder_pct": 0.131092309763815,
+    "creator_balance_pct": 0.09354854622245795,
+    "token_age_days": 0.04923975166780106,
+    "lp_burned_pct": 0.045202269311759274,
+    "vol_to_liq_ratio": 0.043295199559604376,
+    "price_change_24h": 0.03428279597462411,
+    "unique_holders": 0.03195249140433894,
+    "mint_authority_enabled": 0.020378655409567705,
+    "freeze_authority_enabled": 0.00010826009060891536
+  },
+  "dataset_source": "REAL (DexScreener+RPC+RugCheck)"
+}

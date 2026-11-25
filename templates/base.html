@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}RugScan — Deteksi Rug Pull Token Solana{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+  <!-- SIDEBAR NAV -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-icon">◈</span>
+      <span class="logo-text">Rug<span class="accent">Scan</span></span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint=='index' %}active{% endif %}">
+        <span class="nav-icon">⬡</span> Dashboard
+      </a></li>
+      <li><a href="{{ url_for('detect') }}" class="nav-link {% if request.endpoint=='detect' %}active{% endif %}">
+        <span class="nav-icon">⬡</span> Deteksi Token
+      </a></li>
+      <li><a href="{{ url_for('model_info') }}" class="nav-link {% if request.endpoint=='model_info' %}active{% endif %}">
+        <span class="nav-icon">⬡</span> Model & Evaluasi
+      </a></li>
+      <li><a href="{{ url_for('dataset_view') }}" class="nav-link {% if request.endpoint=='dataset_view' %}active{% endif %}">
+        <span class="nav-icon">⬡</span> Dataset
+      </a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <span class="mono text-dim">RugScan v11.3-FastFetch</span><br>
+      <span class="mono text-dim">Blockchain: Solana</span>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

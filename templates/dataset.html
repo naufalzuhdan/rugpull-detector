@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+{% block title %}Dataset — RugScan
+<script>
+function showCommand() {
+  const target = document.getElementById('collectTarget').value;
+  const delay  = document.getElementById('collectDelay').value;
+  const cmd = `cd rugpull_detector
+python model/auto_collect.py --target ${target} --delay ${delay} --train-after`;
+  document.getElementById('cmdText').textContent = cmd;
+  document.getElementById('cmdBox').style.display = 'block';
+}
+
+function copyCmd() {
+  const text = document.getElementById('cmdText').textContent;
+  navigator.clipboard.writeText(text).then(() => alert('Perintah disalin!'));
+}
+
+async function startAutoCollect() {
+  const target = document.getElementById('collectTarget').value;
+  const delay  = document.getElementById('collectDelay').value;
+  const status = document.getElementById('collectStatus');
+  status.style.display = 'block';
+  status.innerHTML = '<div class="alert alert-info">⏳ Memulai auto-collect di background server... Cek log terminal untuk progress.</div>';
+
+  try {
+    const res = await fetch('/api/auto-collect', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({target: parseInt(target), delay: parseFloat(delay)})
+    });
+    const data = await res.json();
+    if (data.success) {
+      status.innerHTML = `<div class="alert alert-success">✅ ${data.message}<br><small style="opacity:0.8">Refresh halaman setelah beberapa menit untuk melihat dataset yang diperbarui.</small></div>`;
+    } else {
+      status.innerHTML = `<div class="alert alert-danger">❌ ${data.error}</div>`;
+    }
+  } catch(e) {
+    status.innerHTML = '<div class="alert alert-danger">❌ Gagal terhubung ke server.</div>';
+  }
+}
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.token-cell { display:flex; align-items:center; gap:8px; }
+.token-avatar {
+  width:28px; height:28px; border-radius:50%;
+  background:linear-gradient(135deg,var(--accent-dim),var(--bg-hover));
+  border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  font-size:10px; font-weight:800; color:var(--accent);
+  flex-shrink:0;
+}
+.token-name-wrap { line-height:1.3; }
+.token-name  { font-weight:700; color:#fff; font-size:12px; }
+.token-sym   { font-size:10px; color:var(--text-dim); }
+.addr-link   {
+  font-family:var(--font-mono); font-size:10px; color:var(--accent);
+  text-decoration:none; letter-spacing:0.2px;
+}
+.addr-link:hover { text-decoration:underline; }
+.addr-short  { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); }
+.copy-btn    {
+  background:none; border:none; color:var(--text-dim);
+  cursor:pointer; font-size:11px; padding:2px 4px;
+  border-radius:3px; transition:color 0.15s;
+}
+.copy-btn:hover { color:var(--accent); }
+.search-input {
+  background:#07090d; border:1px solid var(--border); border-radius:var(--radius);
+  padding:8px 14px; color:var(--text); font-family:var(--font-mono);
+  font-size:12px; outline:none; width:260px;
+  transition:border-color 0.2s;
+}
+.search-input:focus { border-color:var(--accent); }
+.filter-btn {
+  padding:8px 14px; border-radius:var(--radius); border:1px solid var(--border);
+  background:var(--bg-hover); color:var(--text-muted); font-size:12px;
+  cursor:pointer; font-family:var(--font-main); font-weight:600;
+  transition:all 0.15s;
+}
+.filter-btn.active { background:var(--accent-dim); color:var(--accent); border-color:rgba(0,212,255,0.3); }
+.filter-btn:hover:not(.active) { border-color:var(--border-glow); color:var(--text); }
+.num-cell { font-family:var(--font-mono); font-size:11px; text-align:right; }
+.val-danger { color:var(--red); }
+.val-warn   { color:var(--orange); }
+.val-ok     { color:var(--green); }
+.val-dim    { color:var(--text-muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-badge">Training Data</div>
+  <h1>Dataset</h1>
+  <p>Data training model Random Forest — fitur on-chain token Solana (legitimate vs rug pull).</p>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid mb-6">
+  <div class="stat-card">
+    <div class="stat-label">Total Sampel</div>
+    <div class="stat-value">{{ total }}</div>
+    <div class="stat-sub">Training + Test (80:20)</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">Rug Pull</div>
+    <div class="stat-value">{{ rug_count }}</div>
+    <div class="stat-sub">Label = 1 · {{ ((rug_count/total)*100)|round(1) if total else 0 }}%</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-label">Legitimate</div>
+    <div class="stat-value">{{ legit_count }}</div>
+    <div class="stat-sub">Label = 0 · {{ ((legit_count/total)*100)|round(1) if total else 0 }}%</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Fitur Model</div>
+    <div class="stat-value">12</div>
+    <div class="stat-sub">On-chain features</div>
+  </div>
+</div>
+
+<div class="alert alert-info mb-4">
+  💡 Dataset dapat diisi dengan data real secara otomatis menggunakan <strong>Auto Collect</strong> — 
+  sistem akan menemukan token dari DexScreener dan memberi label otomatis via RugCheck.xyz.
+</div>
+
+<!-- Auto Collect Panel -->
+<div class="card mb-6">
+  <div class="card-title">🤖 Auto Collect Dataset (DexScreener + RugCheck.xyz)</div>
+  <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;line-height:1.6">
+    Kumpulkan data token Solana secara <strong style="color:var(--text)">otomatis</strong> tanpa perlu daftar token manual.
+    Sistem menemukan token dari DexScreener (trending + new pairs), lalu memberi label via
+    <strong style="color:var(--accent)">RugCheck.xyz API</strong> + validasi 12 kriteria on-chain.
+  </p>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+    <div class="form-group" style="margin:0;display:flex;align-items:center;gap:8px">
+      <label class="form-label" style="margin:0;white-space:nowrap">Target Baris:</label>
+      <input type="number" id="collectTarget" class="form-input" value="1000" min="100" max="5000"
+             style="width:100px">
+    </div>
+    <div class="form-group" style="margin:0;display:flex;align-items:center;gap:8px">
+      <label class="form-label" style="margin:0;white-space:nowrap">Jeda API (detik):</label>
+      <input type="number" id="collectDelay" class="form-input" value="1.5" min="0.5" max="5.0" step="0.5"
+             style="width:80px">
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <button class="btn btn-primary" onclick="startAutoCollect()">
+      🚀 Jalankan via Terminal (Recommended)
+    </button>
+    <button class="btn btn-secondary" onclick="showCommand()">
+      📋 Lihat Perintah
+    </button>
+  </div>
+  <div id="cmdBox" style="display:none">
+    <pre class="rules-pre" id="cmdText"></pre>
+    <button onclick="copyCmd()" class="btn btn-secondary" style="margin-top:8px">⎘ Salin Perintah</button>
+  </div>
+  <div id="collectStatus" style="display:none;margin-top:12px"></div>
+  <hr class="divider">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px">
+    <div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:4px">📡 Sumber Token</div>
+      <div style="color:var(--text-muted)">DexScreener trending, token terbaru, dan pencarian keyword Solana</div>
+    </div>
+    <div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:4px">🏷️ Auto-Labeling</div>
+      <div style="color:var(--text-muted)">RugCheck.xyz score + validasi mint authority, top holders, LP burned</div>
+    </div>
+    <div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:4px">🔄 Tanpa Batas</div>
+      <div style="color:var(--text-muted)">Loop otomatis sampai target tercapai, bisa resume jika terputus</div>
+    </div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="card">
+  <!-- Pagination Controls -->
+  {% if not show_all and total_pages > 1 %}
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="text-dim" style="font-size:12px">Halaman:</span>
+      {% if current_page > 1 %}
+        <a href="?page=1&per_page={{ per_page }}" class="filter-btn" style="text-decoration:none">⟨⟨ Pertama</a>
+        <a href="?page={{ current_page - 1 }}&per_page={{ per_page }}" class="filter-btn" style="text-decoration:none">⟨ Prev</a>
+      {% endif %}
+      <span class="filter-btn active" style="cursor:default">{{ current_page }} / {{ total_pages }}</span>
+      {% if current_page < total_pages %}
+        <a href="?page={{ current_page + 1 }}&per_page={{ per_page }}" class="filter-btn" style="text-decoration:none">Next ⟩</a>
+        <a href="?page={{ total_pages }}&per_page={{ per_page }}" class="filter-btn" style="text-decoration:none">Terakhir ⟩⟩</a>
+      {% endif %}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="text-dim" style="font-size:12px">Per halaman:</span>
+      <select id="perPageSelect" class="form-input" style="width:100px;padding:6px 10px" onchange="changePerPage()">
+        <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+        <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+        <option value="250" {% if per_page == 250 %}selected{% endif %}>250</option>
+        <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+        <option value="1000" {% if per_page == 1000 %}selected{% endif %}>1000</option>
+      </select>
+      <a href="?show_all=true" class="btn btn-secondary" style="font-size:12px;padding:6px 12px">📋 Tampilkan Semua ({{ total }})</a>
+    </div>
+  </div>
+  {% elif show_all %}
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+    <div class="alert" style="margin:0;padding:8px 12px;background:var(--accent-dim);border-color:rgba(0,212,255,0.3)">
+      ✅ Menampilkan <strong>SEMUA {{ total }} baris</strong> data
+      {% if total > 1000 %}
+      <br><small style="opacity:0.8">⚠️ Performa browser mungkin melambat dengan data yang sangat besar</small>
+      {% endif %}
+    </div>
+    <a href="?page=1&per_page=100" class="btn btn-secondary" style="font-size:12px;padding:6px 12px">↩️ Kembali ke Pagination</a>
+  </div>
+  {% endif %}
+
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+    <div class="card-title" style="margin-bottom:0">
+      Preview Dataset
+      <span class="mono text-dim" style="font-size:11px;font-weight:400;margin-left:8px">
+        menampilkan <span id="visibleCount">{{ sample|length }}</span> dari {{ total }} baris
+      </span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="text" class="search-input" id="searchBox" placeholder="Cari nama / simbol / address...">
+      <button class="filter-btn active" id="btnAll"    onclick="filterTable('all')">Semua</button>
+      <button class="filter-btn"        id="btnLegit"  onclick="filterTable('legit')">✅ Legitimate</button>
+      <button class="filter-btn"        id="btnRug"    onclick="filterTable('rug')">🚨 Rug Pull</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="data-table" id="datasetTable">
+      <thead>
+        <tr>
+          <th style="min-width:180px">Token</th>
+          <th style="min-width:200px">Contract Address</th>
+          <th>top10_holder</th>
+          <th>top1_holder</th>
+          <th>creator_bal</th>
+          <th>mint_auth</th>
+          <th>freeze_auth</th>
+          <th>lp_burned</th>
+          <th>liq_mc_ratio</th>
+          <th>vol_liq_ratio</th>
+          <th>age_days</th>
+          <th>liquidity</th>
+          <th>holders</th>
+          <th>price_chg_24h</th>
+          <th style="min-width:90px">Label</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        {% for row in sample %}
+        {% set is_rug = row.label == 1 %}
+        {% set addr = row.contract_address if has_meta and row.contract_address else '' %}
+        {% set name = row.token_name if has_meta and row.token_name else 'Token #' ~ loop.index %}
+        {% set sym  = row.token_symbol if has_meta and row.token_symbol else '???' %}
+        <tr data-label="{{ row.label }}"
+            data-search="{{ name|lower }} {{ sym|lower }} {{ addr|lower }}">
+
+          <!-- Token Name + Symbol -->
+          <td>
+            <div class="token-cell">
+              <div class="token-avatar">{{ sym[:2] }}</div>
+              <div class="token-name-wrap">
+                <div class="token-name">{{ name }}</div>
+                <div class="token-sym">{{ sym }}</div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Contract Address with link -->
+          <td>
+            {% if addr %}
+            <div style="display:flex;align-items:center;gap:4px">
+              <a href="https://solscan.io/token/{{ addr }}" target="_blank"
+                 class="addr-link" title="{{ addr }}">
+                {{ addr[:8] }}...{{ addr[-6:] }}
+              </a>
+              <button class="copy-btn" onclick="copyAddr('{{ addr }}')" title="Salin address">⎘</button>
+              <a href="https://dexscreener.com/solana/{{ addr }}" target="_blank"
+                 class="copy-btn" title="Buka di DexScreener">📊</a>
+            </div>
+            {% else %}
+            <span class="addr-short">—</span>
+            {% endif %}
+          </td>
+
+          <!-- Numeric features with color coding -->
+          <td class="num-cell {% if row.top10_holder_pct|float > 70 %}val-danger{% elif row.top10_holder_pct|float > 50 %}val-warn{% else %}val-ok{% endif %}">
+            {{ "%.1f"|format(row.top10_holder_pct|float) }}%
+          </td>
+          <td class="num-cell {% if row.top1_holder_pct|float > 30 %}val-danger{% elif row.top1_holder_pct|float > 15 %}val-warn{% else %}val-ok{% endif %}">
+            {{ "%.1f"|format(row.top1_holder_pct|float) }}%
+          </td>
+          <td class="num-cell {% if row.creator_balance_pct|float > 20 %}val-danger{% elif row.creator_balance_pct|float > 10 %}val-warn{% else %}val-ok{% endif %}">
+            {{ "%.1f"|format(row.creator_balance_pct|float) }}%
+          </td>
+          <td class="num-cell" style="text-align:center">
+            {% if row.mint_authority_enabled == 1 %}
+              <span style="color:var(--red)">✗ Aktif</span>
+            {% else %}
+              <span style="color:var(--green)">✓ Off</span>
+            {% endif %}
+          </td>
+          <td class="num-cell" style="text-align:center">
+            {% if row.freeze_authority_enabled == 1 %}
+              <span style="color:var(--red)">✗ Aktif</span>
+            {% else %}
+              <span style="color:var(--green)">✓ Off</span>
+            {% endif %}
+          </td>
+          <td class="num-cell {% if row.lp_burned_pct|float < 20 %}val-danger{% elif row.lp_burned_pct|float < 50 %}val-warn{% else %}val-ok{% endif %}">
+            {{ "%.1f"|format(row.lp_burned_pct|float) }}%
+          </td>
+          <td class="num-cell val-dim">{{ "%.4f"|format(row.liq_to_mc_ratio|float) }}</td>
+          <td class="num-cell {% if row.vol_to_liq_ratio|float > 10 %}val-warn{% else %}val-dim{% endif %}">
+            {{ "%.2f"|format(row.vol_to_liq_ratio|float) }}
+          </td>
+          <td class="num-cell {% if row.token_age_days|float < 7 %}val-warn{% else %}val-dim{% endif %}">
+            {{ "%.0f"|format(row.token_age_days|float) }}d
+          </td>
+          <td class="num-cell val-dim">
+            ${{ "{:,.0f}".format(row.liquidity|float) }}
+          </td>
+          <td class="num-cell {% if row.unique_holders|int < 100 %}val-warn{% else %}val-dim{% endif %}">
+            {{ "{:,}".format(row.unique_holders|int) }}
+          </td>
+          <td class="num-cell {% if row.price_change_24h|float > 200 %}val-warn{% elif row.price_change_24h|float < -50 %}val-danger{% else %}val-dim{% endif %}">
+            {{ "%.1f"|format(row.price_change_24h|float) }}%
+          </td>
+
+          <!-- Label badge -->
+          <td>
+            {% if is_rug %}
+              <span class="badge badge-rug">🚨 Rug Pull</span>
+            {% else %}
+              <span class="badge badge-legit">✅ Legitimate</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- No results -->
+  <div id="noResults" style="display:none;text-align:center;padding:40px;color:var(--text-dim)">
+    Tidak ada data yang cocok dengan pencarian.
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="card mt-6">
+  <div class="card-title">Keterangan Warna</div>
+  <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px">
+    <span><span style="color:var(--red)">■</span> Nilai berbahaya / risiko tinggi</span>
+    <span><span style="color:var(--orange)">■</span> Nilai perlu diwaspadai</span>
+    <span><span style="color:var(--green)">■</span> Nilai aman / normal</span>
+    <span><span style="color:var(--text-muted)">■</span> Nilai netral</span>
+    <span>⎘ = Salin address &nbsp;|&nbsp; 📊 = Buka DexScreener</span>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentFilter = 'all';
+
+function changePerPage() {
+  const perPage = document.getElementById('perPageSelect').value;
+  window.location.href = `?page=1&per_page=${perPage}`;
+}
+
+function filterTable(type) {
+  currentFilter = type;
+  ['All','Legit','Rug'].forEach(t => {
+    document.getElementById('btn'+t).classList.remove('active');
+  });
+  document.getElementById('btn' + type.charAt(0).toUpperCase() + type.slice(1)).classList.add('active');
+  applyFilters();
+}
+
+document.getElementById('searchBox').addEventListener('input', applyFilters);
+
+function applyFilters() {
+  const q    = document.getElementById('searchBox').value.toLowerCase().trim();
+  const rows = document.querySelectorAll('#tableBody tr');
+  let visible = 0;
+
+  rows.forEach(row => {
+    const label  = row.dataset.label;
+    const search = row.dataset.search || '';
+    const matchF = currentFilter === 'all'
+      || (currentFilter === 'legit' && label === '0')
+      || (currentFilter === 'rug'   && label === '1');
+    const matchQ = !q || search.includes(q);
+    const show   = matchF && matchQ;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  document.getElementById('visibleCount').textContent = visible;
+  document.getElementById('noResults').style.display  = visible === 0 ? 'block' : 'none';
+}
+
+function copyAddr(addr) {
+  navigator.clipboard.writeText(addr).then(() => {
+    // Brief visual feedback
+    event.target.textContent = '✓';
+    setTimeout(() => event.target.textContent = '⎘', 1200);
+  });
+}
+</script>
+{% endblock %}
